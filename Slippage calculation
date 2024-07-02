@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+#this slippage implementation shows how you can manage your slippage costs by intraday 
+#trading in relation to VWAP rather than buying / selling all at once at a specific time
 
 np.random.seed(42)
 minutes_in_a_day = 390 
