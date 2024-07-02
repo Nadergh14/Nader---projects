@@ -1,0 +1,45 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+np.random.seed(42)
+minutes_in_a_day = 390 
+prices = np.cumsum(np.random.randn(minutes_in_a_day)) + 100 
+volumes = np.random.randint(1, 1000, size=minutes_in_a_day)
+
+
+cumulative_volume = np.cumsum(volumes)
+vwap = np.cumsum(prices * volumes) / cumulative_volume
+
+def calculate_slippage(prices, volumes, vwap, order_size):
+    total_cost_all_at_once = order_size * prices[-1]
+    total_cost_incrementally = 0
+    traded_volume = 0
+    
+    for i in range(len(prices)):
+        if traded_volume >= order_size:
+            break
+        trade_volume = min(volumes[i], order_size - traded_volume)
+        total_cost_incrementally += trade_volume * prices[i]
+        traded_volume += trade_volume
+
+    slippage_all_at_once = (total_cost_all_at_once / order_size) - vwap[-1]
+    slippage_incrementally = (total_cost_incrementally / order_size) - vwap[-1]
+    
+    return slippage_all_at_once, slippage_incrementally
+
+order_size = 10000
+slippage_all_at_once, slippage_incrementally = calculate_slippage(prices, volumes, vwap, order_size)
+
+print(f"Slippage when trading all at once: {slippage_all_at_once:.2f}")
+print(f"Slippage when trading incrementally: {slippage_incrementally:.2f}")
+
+
+plt.figure(figsize=(14, 7))
+plt.plot(prices, label='Price')
+plt.plot(vwap, label='VWAP', linestyle='--')
+plt.xlabel('Minutes')
+plt.ylabel('Price')
+plt.legend()
+plt.title('Intraday Price and VWAP')
+plt.show()
