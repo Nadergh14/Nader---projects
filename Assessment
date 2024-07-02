@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+#this is example data to add the 5 features (this was only used for feature 1-3)
+
+trades = [(50, 35, 'buy'), (51, 20, 'sell'), (52, 70, 'buy'), (51, 65, 'sell'), (53, 17, 'buy'), (54,90,'sell'),(55,6,'buy')]
+bid_volume = [700, 420, 390, 250, 120]
+ask_volume = [450, 400, 320, 100, 120]
+trading_data = [
+    {'price': 50, 'buy_volume': 500, 'sell_volume': 200},
+    {'price': 55, 'buy_volume': 450, 'sell_volume': 300},
+    {'price': 60, 'buy_volume': 400, 'sell_volume': 400},
+    {'price': 65, 'buy_volume': 350, 'sell_volume': 500},
+    {'price': 70, 'buy_volume': 300, 'sell_volume': 600},
+]
+ 
+# First new feauture: liquidity shock indicator. This will help to show what stocks have either
+# high / low liquidity since that if it has higher liquidity, means it has a tighter bid/ask
+# spread which is easier to trade and has lower transaction costs.
+
+average_bid = np.mean(bid_volume)
+
+liquidity_shock_indicator = (bid_volume[-1] - average_bid) / average_bid
+
+
+# Second new feature: Order Flow Volatility. This will show the standard deviation of volatility
+# across a stock which will reduce transaction costs since it shows if there is agressive trading
+# behaviors whcih will lead to wider bid/ask spreads which will increase a traders
+# transaction costs
+
+
+order_flow_volatility = np.std([trade[1] if trade[2] == 'buy' else -trade[1] for trade in trades])
+
+
+# third new feature: Bid/Ask Order Flow Imbalance chart. An imbalance chat is a way to
+# indicate future price movements which will allow traders to execute their orders at
+# better times
+
+df = pd.DataFrame(trading_data)
+
+plt.figure(figsize=(10, 6))
+
+plt.barh(df['price'], df['buy_volume'], color='green', alpha=0.6, label='Buy Volume')
+plt.barh(df['price'], -df['sell_volume'], color='red', alpha=0.6, label='Sell Volume')
+
+plt.xlabel('Volume')
+plt.ylabel('Price')
+plt.title('Order Flow Chart')
+plt.legend()
+plt.grid(True)
+
+plt.show()
+
+
+# fourth new featrue: Alpha decay. This is one of the most important metrics as it shows
+# the expected degradation in a trade's performance because of time delay between the 
+#first signal and execution. This allows the trader not only execute at the correct time
+# but fix their trading pace as it shows if they're trading too fast
+# or just right or too slow(trading agressiveness).
+
+np.random.seed(50)
+dates = pd.date_range(start='2024-01-01', periods=20, freq='D')
+portfolio_returns = np.random.normal(0.001, 0.02, size=len(dates))
+benchmark_returns = np.random.normal(0.0005, 0.015, size=len(dates))
+
+
+alphas = portfolio_returns - benchmark_returns
+
+
+data = pd.DataFrame({'Date': dates, 'Alpha': alphas})
+data.set_index('Date', inplace=True)
+
+
+data['RollingAlpha'] = data['Alpha'].rolling(window=10).mean()
+
+def exp_decay(x, a, b):
+    return a * np.exp(-b * x)
+
+x_data = np.arange(len(data))
+y_data = data['Alpha'].values
+params, _ = curve_fit(exp_decay, x_data, y_data, p0=(0.001, 0.01))
+
+
+plt.figure(figsize=(14, 7))
+plt.plot(data.index, data['Alpha'], label='Daily Alpha')
+plt.plot(data.index, data['RollingAlpha'], label='10-Day Rolling Alpha', linewidth=2)
+plt.plot(data.index, exp_decay(x_data, *params), label='Exponential Decay', linestyle='--', linewidth=3)
+plt.xlabel('Dates')
+plt.ylabel('Alpha')
+plt.title('Alpha Decay Over Time')
+plt.legend()
+plt.show()
+
+
+
+# fifth new feature: Portfolio rebalancing. This code shows how transaction costs decrease
+# when the portfolio is rebalanced less frequently. In this case, I did quarterly rebalancing
+# instead of monthly rebalancing which gave a results of $27.42 vs $57.76
+
+np.random.seed(50) 
+dates = pd.date_range(start="2023-01-01", end="2024-03-31", freq='M')
+num_periods = len(dates)
+
+returns = np.random.normal(0.01, 0.05, (num_periods, 4))
+
+
+initial_value = 100000
+initial_weights = np.array([0.4, 0.3, 0.2, 0.1])
+
+
+broker_fee = 0.001
+
+def calculate_transaction_costs(values_before, values_after):
+    transaction_costs = np.sum(np.abs(values_before - values_after)) * broker_fee
+    return transaction_costs
+
+def rebalance_portfolio(portfolio_value, weights, returns, freq='M'):
+    transaction_costs_total = 0
+    portfolio_values = [portfolio_value]
+    current_values = weights * portfolio_value
+    
+    if freq == 'M':
+        rebalance_dates = dates
+    elif freq == 'Q':
+        rebalance_dates = dates[::3]
+    else:
+        raise ValueError("Frequency must be 'M' or 'Q'")
+    
+    for i in range(1, len(returns)):
+       
+        current_values *= (1 + returns[i-1])
+        portfolio_value = np.sum(current_values)
+        portfolio_values.append(portfolio_value)
+        
+        if dates[i] in rebalance_dates:
+    
+            new_values = initial_weights * portfolio_value
+            
+          
+            transaction_costs = calculate_transaction_costs(current_values, new_values)
+            transaction_costs_total += transaction_costs
+            
+          
+            portfolio_value -= transaction_costs
+            
+            
+            current_values = new_values
+    
+    return portfolio_values, transaction_costs_total
+
+
+portfolio_values_monthly, transaction_costs_monthly = rebalance_portfolio(initial_value, initial_weights, returns, freq='M')
+
+portfolio_values_quarterly, transaction_costs_quarterly = rebalance_portfolio(initial_value, initial_weights, returns, freq='Q')
+
+
+monthly_costs = round(transaction_costs_monthly, 2)
+quarterly_costs = round(transaction_costs_quarterly, 2)
+
+print(f"Total transaction costs with monthly rebalancing: ${monthly_costs}")
+print(f"Total transaction costs with quarterly rebalancing: ${quarterly_costs}")
